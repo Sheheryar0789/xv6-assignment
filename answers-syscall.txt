@@ -1,0 +1,26 @@
+1. usertrap() called syscall(). You can see it in the backtrace, frame #1
+is usertrap() at trap.c:68.
+
+2. p->trapframe->a7 = 0xf, which is 15 in decimal. Checked syscall.h and
+that's SYS_open. Makes sense since init.c's first real call is
+open("console", O_RDWR) to set up fd 0 before it dups to stdout/stderr.
+
+3. sstatus came out to 0x200000022. The SPP bit is bit 8 (mask 0x100),
+and 0x022 & 0x100 = 0, so SPP = 0 = previous mode was user mode. Checks
+out since we got here through ecall from user mode.
+
+4. The instruction is:
+80001d8a: lw a3,0(zero)
+this loads from address 0 into a3. I know a3 = num because the next
+line is addiw a4,a3,-1, which is just num-1 for the if(num > 0...)
+check right after.
+
+5. p->name was "init", pid 1.
+
+6. It crashes because address 0 isn't mapped in the kernel's page
+table. Kernel memory starts at KERNBASE (0x80000000), so low addresses
+like 0 are unmapped on purpose, basically so null pointer derefs fault
+instead of just reading garbage. scause was 0xd which is a load page
+fault, and stval was 0x0, so that all lines up with trying to lw from
+address 0. The trap handler doesn't expect page faults from inside the
+kernel itself so it just panics.

@@ -142,13 +142,26 @@ syscall(void)
   struct proc *p = myproc();
 
   num = p->trapframe->a7;
-    if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-      if(p->sandbox_mask & (1 << num)) {
-        p->trapframe->a0 = -1;
-      } else {
-        p->trapframe->a0 = syscalls[num]();
+  // num = * (int *) 0;
+  if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    int reject = 0;
+
+    if(p->sandbox_mask & (1 << num)) {
+      reject = 1;
+      if(num == SYS_open || num == SYS_exec) {
+        char path[MAXPATH];
+        if(argstr(0, path, MAXPATH) >= 0 &&
+          strncmp(path, p->sandbox_path, MAXPATH) == 0 &&
+          strncmp(path, "-", MAXPATH) != 0)
+          reject = 0;   // path matches the allowed one
       }
-    } else {
+    }
+
+    if(reject)
+      p->trapframe->a0 = -1;
+    else
+      p->trapframe->a0 = syscalls[num]();
+  } else {
     printk("%d %s: unknown sys call %d\n", p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
